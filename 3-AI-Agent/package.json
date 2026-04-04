@@ -1,0 +1,18 @@
+{
+  "name": "3-ai-agent",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/agentA",
+    "apps/worker"
+  ],
+  "scripts": {
+    "dev:agenta": "npm run dev -w apps/agentA",
+    "dev:worker": "npm run dev -w apps/worker",
+    "start": "npm run start -w apps/agentA",
+    "worker": "npm run start -w apps/worker",
+    "check": "npm run check --workspaces",
+    "docker:up": "docker compose up --build",
+    "docker:down": "docker compose down"
+  }
+}
