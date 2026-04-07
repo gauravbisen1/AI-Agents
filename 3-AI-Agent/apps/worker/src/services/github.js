@@ -1,5 +1,4 @@
 import { spawn } from 'node:child_process';
-import fs from 'node:fs/promises';
 import path from 'node:path';
 
 export function buildBranchName(incomingErrorId) {
@@ -70,7 +69,8 @@ export async function createPullRequest({
   fixNote,
   checksOutput,
   errorMessage,
-  stackTrace
+  stackTrace,
+  fixApplied = false
 }) {
   const hasPlaceholder = [owner, repo, token].some((value) =>
     String(value || '').toLowerCase().includes('replace_me')
@@ -80,6 +80,13 @@ export async function createPullRequest({
     return {
       prUrl: null,
       note: 'missing/placeholder GitHub owner/repo/token, skipping PR creation'
+    };
+  }
+
+  if (!fixApplied) {
+    return {
+      prUrl: null,
+      note: 'no source patch was applied, skipping PR creation'
     };
   }
 
@@ -94,30 +101,6 @@ export async function createPullRequest({
 
   await runGit(['checkout', '-b', branchName], targetRepoDir);
 
-  const reportPath = path.join(targetRepoDir, 'AI_AGENT_REPORT.md');
-  const report = [
-    `# AI Agent Incident ${incomingErrorId}`,
-    '',
-    '## Error',
-    errorMessage || 'n/a',
-    '',
-    '## Stack Trace',
-    '```',
-    stackTrace || 'n/a',
-    '```',
-    '',
-    '## LLM Suggestion',
-    llmSuggestion || 'n/a',
-    '',
-    '## Fix Action',
-    fixNote || 'No patch applied yet.',
-    '',
-    '## Check Output',
-    checksOutput || 'n/a'
-  ].join('\n');
-
-  await fs.writeFile(reportPath, `${report}\n`, 'utf8');
-
   await runGit(['add', '.'], targetRepoDir);
 
   const status = await runGit(['status', '--porcelain'], targetRepoDir);
@@ -130,7 +113,7 @@ export async function createPullRequest({
 
   await runGit(['config', 'user.name', 'AI Agent'], targetRepoDir);
   await runGit(['config', 'user.email', 'ai-agent@local'], targetRepoDir);
-  await runGit(['commit', '-m', `chore: AI agent incident report for error ${incomingErrorId}`], targetRepoDir);
+  await runGit(['commit', '-m', `fix: ai patch for error ${incomingErrorId}`], targetRepoDir);
   await runGit(['push', '-u', 'origin', branchName], targetRepoDir);
 
   const pr = await createPullRequestViaApi({
@@ -143,8 +126,21 @@ export async function createPullRequest({
       '',
       `- Error ID: ${incomingErrorId}`,
       `- Branch: ${branchName}`,
+      `- Fix note: ${fixNote || 'patch applied'}`,
       '',
-      'Please review AI_AGENT_REPORT.md for analysis and proposed direction.'
+      '## Error',
+      errorMessage || 'n/a',
+      '',
+      '## Stack Trace',
+      '```',
+      stackTrace || 'n/a',
+      '```',
+      '',
+      '## Checks',
+      checksOutput ? checksOutput.slice(0, 1500) : 'n/a',
+      '',
+      '## LLM Suggestion (truncated)',
+      llmSuggestion ? llmSuggestion.slice(0, 1200) : 'n/a'
     ].join('\n'),
     head: branchName,
     base: baseBranch

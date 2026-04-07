@@ -5,6 +5,7 @@ import { insertIncomingError, createErrorJob, pool } from './db.js';
 import { enqueueErrorJob } from './queue.js';
 import { mapToRepo } from './repoMap.js';
 import { sendTelegramResult } from './services/telegram.js';
+import { logger } from './logger.js';
 
 const app = express();
 app.use(
@@ -122,6 +123,7 @@ app.post('/ingest/opclaw', async (req, res) => {
     const job = await enqueueErrorJob({ incomingErrorId, mappedRepo, payload });
 
     await createErrorJob(incomingErrorId, mappedRepo, job.id);
+    logger.info({ tag: 'ingest:opclaw', incomingErrorId, mappedRepo, jobId: job.id }, 'queued');
 
     return res.status(202).json({
       status: 'queued',
@@ -130,7 +132,7 @@ app.post('/ingest/opclaw', async (req, res) => {
       mappedRepo
     });
   } catch (error) {
-    console.error('ingest failure', error);
+    logger.error({ tag: 'ingest:opclaw', err: error }, 'failed');
     return res.status(500).json({ error: 'failed to ingest error' });
   }
 });
@@ -139,11 +141,13 @@ app.post('/ingest/telegram', async (req, res) => {
   try {
     const secretHeader = req.header('x-telegram-bot-api-secret-token') || '';
     if (!isValidTelegramWebhookSecret(secretHeader)) {
+      logger.warn({ tag: 'ingest:telegram' }, 'rejected invalid secret');
       return res.status(401).json({ error: 'invalid telegram webhook secret' });
     }
 
     const payload = parseTelegramUpdate(req.body);
     if (!payload) {
+      logger.debug({ tag: 'ingest:telegram' }, 'ignored no-text update');
       return res.status(200).json({ status: 'ignored', reason: 'no text message in update' });
     }
 
@@ -151,6 +155,7 @@ app.post('/ingest/telegram', async (req, res) => {
     const hasConfiguredChatId = configuredChatId && !configuredChatId.toLowerCase().includes('replace_me');
 
     if (hasConfiguredChatId && payload.chatId !== configuredChatId) {
+      logger.warn({ tag: 'ingest:telegram', chatId: payload.chatId }, 'rejected chat');
       return res.status(403).json({ error: 'chat not allowed' });
     }
 
@@ -159,6 +164,7 @@ app.post('/ingest/telegram', async (req, res) => {
     const job = await enqueueErrorJob({ incomingErrorId, mappedRepo, payload });
 
     await createErrorJob(incomingErrorId, mappedRepo, job.id);
+    logger.info({ tag: 'ingest:telegram', incomingErrorId, mappedRepo, jobId: job.id }, 'queued');
 
     return res.status(202).json({
       status: 'queued',
@@ -167,7 +173,7 @@ app.post('/ingest/telegram', async (req, res) => {
       mappedRepo
     });
   } catch (error) {
-    console.error('telegram ingest failure', error);
+    logger.error({ tag: 'ingest:telegram', err: error }, 'failed');
     return res.status(500).json({ error: 'failed to ingest telegram update' });
   }
 });
@@ -208,7 +214,7 @@ app.get('/errors/:incomingErrorId', async (req, res) => {
 
     return res.json(result.rows[0]);
   } catch (error) {
-    console.error('status lookup failure', error);
+    logger.error({ tag: 'status:lookup', err: error }, 'failed');
     return res.status(500).json({ error: 'failed to fetch error status' });
   }
 });
@@ -216,6 +222,7 @@ app.get('/errors/:incomingErrorId', async (req, res) => {
 app.post('/callback/worker-result', async (req, res) => {
   try {
     const { incomingErrorId, status, prUrl, summary, checksStatus } = req.body;
+    logger.info({ tag: 'callback', incomingErrorId, status, checksStatus: checksStatus || 'n/a' }, 'received');
 
     await pool.query(
       `
@@ -232,21 +239,21 @@ app.post('/callback/worker-result', async (req, res) => {
     try {
       const telegramResult = await sendTelegramResult({ incomingErrorId, status, prUrl, summary });
       if (telegramResult.skipped) {
-        console.log('telegram skipped (missing config)');
+        logger.info({ tag: 'telegram', incomingErrorId }, 'skipped missing config');
       } else {
-        console.log('telegram sent successfully for error', incomingErrorId);
+        logger.info({ tag: 'telegram', incomingErrorId }, 'sent');
       }
     } catch (telegramError) {
-      console.error('telegram send failure', telegramError);
+      logger.error({ tag: 'telegram', incomingErrorId, err: telegramError }, 'send failed');
     }
 
     return res.json({ ok: true });
   } catch (error) {
-    console.error('callback failure', error);
+    logger.error({ tag: 'callback', err: error }, 'failed');
     return res.status(500).json({ error: 'failed to persist worker result' });
   }
 });
 
 app.listen(config.port, () => {
-  console.log(`Serverr listening on :${config.port}`);
+  logger.info({ tag: 'agenta', port: config.port }, 'listening');
 });

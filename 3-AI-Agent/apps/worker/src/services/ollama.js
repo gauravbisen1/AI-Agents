@@ -6,7 +6,11 @@ export async function askOllama(ollamaUrl, prompt) {
       body: JSON.stringify({
         model: process.env.OLLAMA_MODEL || 'llama3.1',
         prompt,
-        stream: false
+        stream: false,
+        options: {
+          temperature: 0,
+          top_p: 0.1
+        }
       })
     });
 
