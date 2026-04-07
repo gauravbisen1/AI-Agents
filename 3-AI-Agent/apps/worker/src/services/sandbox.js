@@ -143,8 +143,9 @@ export async function buildPatchContext({ repoDir, files, maxChars = 12000 }) {
     const absolutePath = path.join(repoDir, relativePath);
     try {
       const content = await fs.readFile(absolutePath, 'utf8');
-      const snippet = content.slice(0, 2500);
-      const block = [`FILE: ${relativePath}`, '```', snippet, '```', ''].join('\n');
+      // Show more context if file contains req.body or validation-related code
+      const snippet = content.slice(0, 4000);
+      const block = [`FILE: ${relativePath}`, '```javascript', snippet, '```', ''].join('\n');
       if (used + block.length > maxChars) break;
       parts.push(block);
       used += block.length;

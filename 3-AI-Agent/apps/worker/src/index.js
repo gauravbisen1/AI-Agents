@@ -131,25 +131,29 @@ const worker = new Worker(
     });
 
     const focusedPath = inspectResult.filesTouched?.[0] || '';
+    
     const prompt = [
-      'You are an autonomous debugging engineer.',
+      'You are a debugging expert. Your task is to analyze the error and generate a fix.',
+      '',
       `Repository: ${mappedRepo}`,
       `Error message: ${normalizedPayload.message}`,
       `Stack trace: ${normalizedPayload.stackTrace || 'n/a'}`,
-      'Output only a valid unified git diff inside a ```diff fenced block.',
-      'Hard requirements:',
-      '- Use standard git patch headers: diff --git a/<path> b/<path>, --- a/<path>, +++ b/<path>.',
-      '- No prose. No explanation. No plain code blocks.',
-      '- Patch must apply cleanly with git apply.',
-      '- Edit only existing source files listed below.',
-      focusedPath ? `- Prioritize and modify this file first: ${focusedPath}` : '- Prioritize stack-trace matched backend files.',
-      '- Keep patch minimal and compilable.',
-      '- Do not include explanations or markdown outside the diff block.',
-      '- If error mentions "Path text is required" or "text required", check for request-body typos like req.body.texttt and fix to req.body.text.',
-      '- If object literal contains duplicate keys (example: user repeated), keep only one key.',
-      '- Do not change unrelated frontend files for backend validation errors.',
       '',
-      'Candidate file context:',
+      'DEBUGGING STEPS:',
+      '1. READ the error message carefully - what field/property is failing?',
+      '2. FIND the source file (listed below) to understand what code is causing it',
+      '3. IDENTIFY the bug: typo, wrong variable name, duplicate key, missing assignment, etc',
+      '4. ANALYZE: Compare the error (e.g., "text" expected) with the code (e.g., req.body.texttt)',
+      '5. FIX: Make the minimal change to match what the error expects',
+      '6. OUTPUT: Generate a unified diff showing the exact lines that changed',
+      '',
+      'DIFF FORMAT (important):',
+      '- Output ONLY a ```diff block. No other text.',
+      '- Include 2-3 context lines before and after each change',
+      '- Use proper headers: diff --git a/path b/path, --- a/path, +++ b/path',
+      '- Prefix removed lines with "- " (dash space), added lines with "+ " (plus space)',
+      '',
+      'CODE TO ANALYZE:',
       patchContext || 'No candidate file content available.'
     ].join('\n');
 

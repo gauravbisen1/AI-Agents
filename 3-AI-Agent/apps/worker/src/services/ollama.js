@@ -8,8 +8,10 @@ export async function askOllama(ollamaUrl, prompt) {
         prompt,
         stream: false,
         options: {
-          temperature: 0,
-          top_p: 0.1
+          temperature: 0.1,
+          top_p: 0.4,
+          top_k: 40,
+          num_predict: 1000
         }
       })
     });
